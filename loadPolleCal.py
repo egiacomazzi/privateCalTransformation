@@ -1,49 +1,21 @@
 import pandas as pd
-import openpyxl
+from icalendar import Calendar, Event
+import os
 
-xl = pd.ExcelFile('/Users/elena/Downloads/TerminkalenderPolle.xlsx')
-
-sheet_names = xl.sheet_names  # see all sheet names ####["September"] #
-for sheet_name in sheet_names:
-
-    # import importfirst excel sheet in the file
-    df = pd.read_excel('/Users/elena/Downloads/TerminkalenderPolle.xlsx', sheet_name=sheet_name)
-   
-    
-    # drop columns which start with "Pauline"
-    df = df[df.columns.drop(list(df.filter(regex='Pauline')))]
-
-    # drop rows without index and values
-    df = df.dropna(how='all', axis=0)
-    #print(df)
-
-    # row 1 as column names and drop row 1
-    df.columns = df.iloc[0]
-    df = df.drop(df.index[0])
-    
-    #print("##############")   
-    first_col = df.columns[0]
-
-    # drop rows with entries "Notiz", "Spooooortchallenge" in column "Woche 31.-6.2." 
-    df = df.drop(df[df[first_col].isin(["Notiz", "Spooooortchallenge", "Wetter"])].index)
-
-    # make column "Woche 31.-6.2." to index
-    df = df.set_index(first_col)
-
-    # transform index "Vormittags/Mittags" to timestamp of 12:00, "Mittags/Nachmittags" to timestamp 14:00, "Nachmittags/Abends" to timestamp of 19:00, "Abends/Nachts" to timestamp of 22:00, "Nachts/Vormittags" to timestamp of 9:00 and keep the ones which are start with "Woche" as they are
-    def map_index(index):
-        # if starts with "Woche" or "KW" return index
+# function to map index to new index
+def map_index(index):
+        # keep the indices which start with "Woche" or "KW" as they are
         if (str(index).startswith('Woche')) or (str(index).startswith('KW')):
             return index
         else:
             if sheet_name in ["Februar", "März", "April"]:
+                # transform index "Vormittags/Mittags" to timestamp of 12:00, "Mittags/Nachmittags" to timestamp 14:00, "Nachmittags/Abends" to timestamp of 19:00, "Abends/Nachts" to timestamp of 22:00, "Nachts/Vormittags" to timestamp of 9:00 and 
                 return {'Vormittags/Mittags': '12:00', 'Mittags/Nachmittags': '14:00', 'Nachmittags/Abends': '19:00', 'Abends/Nachts': '22:00', 'Nachts/Vormittags nächste Tag': '9:00', 'Nachts/Vormittas nächster Tag': '9:00'}.get(index, index)
             else:
                 return {'Vormittags': '09:00', 'Mittags': '12:00', 'Nachmittags': '14:00', 'Abends': '18:00', 'Nachts': '22:00'}.get(index, index)
 
-    df.index = df.index.map(map_index)
-
-    def return_newWeek_df(df):
+# function to return new week df
+def return_newWeek_df(df):
         # make df of first 5 rows and remove from original dataframe
         df1 = df.iloc[:5]
         df = df.iloc[5:]
@@ -55,33 +27,59 @@ for sheet_name in sheet_names:
         df = df.drop(df.index[0])
         return df1, df
 
-    # build a df for each week and save in list
+
+################# Beginning of script ######################
+save_to_Ical = True
+
+# import excel file
+xl = pd.ExcelFile('/Users/elena/Downloads/TerminkalenderPolle.xlsx')
+
+sheet_names = ["Mai"]# xl.sheet_names  # get all sheet names ####["September"] #
+# run through all sheets of file
+for sheet_name in sheet_names:
+    # import sheet of file
+    df = pd.read_excel('/Users/elena/Downloads/TerminkalenderPolle.xlsx', sheet_name=sheet_name)
+   
+    # drop columns which start with "Pauline"
+    df = df[df.columns.drop(list(df.filter(regex='Pauline')))]
+
+    # drop rows without index and values
+    df = df.dropna(how='all', axis=0)
+
+    # first row as column names and drop it
+    df.columns = df.iloc[0]
+    df = df.drop(df.index[0])
+    
+    first_col = df.columns[0] # save the first column name
+    # drop rows with entries "Notiz", "Spooooortchallenge", "Wetter" in first column
+    df = df.drop(df[df[first_col].isin(["Notiz", "Spooooortchallenge", "Wetter"])].index)
+    # make first column to index
+    df = df.set_index(first_col)
+    # map index to new index
+    df.index = df.index.map(map_index)
+
+    # build a df for each week and save df in list
     nr_weeks = len(df) // 5  # 5 rows (times) per week
     weeks = []
-
     for i in range(nr_weeks):
         df1, df = return_newWeek_df(df)
         weeks.append(df1)
-        #print(df1)
-        #print(df)
 
     events_week = []
-
     for week in weeks:
-
         # add to each index the string ":00" to the end of the string
         week.index.name = None
         week.index = pd.to_timedelta(week.index + ":00")
 
         # remove columns which are NaT or NaN
         week = week.dropna(axis=1, how='all')
-
+        # create new df with columns "Date" and "Event"
         df_week1 = pd.DataFrame(columns=["Date","Event"])
-        # run through columns of week df, add index time to column date datetime and save as index of that row, then save to df_week1
+        # run through columns of week df, add index time to column date and save as "Date" of that row, then save to df_week1
         for column in week.columns:
             # if "mir dir" in string "week[column]" replace with "mit Pauline"
             week[column] = week[column].str.replace("mir dir", "mit Pauline")
-
+            # add index time to column date and save as "Date" of that row, save "Event"
             df_week_temp = pd.DataFrame({"Date": pd.to_datetime(column) + week.index, "Event": week[column]})
 
             if sheet_name in ["Februar", "März", "April"]:
@@ -90,20 +88,15 @@ for sheet_name in sheet_names:
 
             # concatinate df_week_temp to df_week1
             df_week1 = pd.concat([df_week1, df_week_temp])
-            #print("#######################")
 
         # reset index of df_week1
         df_week1 = df_week1.reset_index(drop=True)
         # remove rows where Event is NaN
         df_week1 = df_week1.dropna(subset=["Event"])
-        #print(df_week1)
         events_week.append(df_week1)
 
-
-    save_to_Ical = True
+    ##################### Save to Ical ############################
     if save_to_Ical == True:
-        from icalendar import Calendar, Event
-        import os
         cal = Calendar()
         cal.add('prodid', sheet_name)
         cal.add('version', '2.0')
@@ -118,12 +111,8 @@ for sheet_name in sheet_names:
                 event.add('dtend', row["Date"] + pd.DateOffset(hours=2))
                 cal.add_component(event)
 
-                #event.add('dtstamp', datetime(2005,4,4,0,10,0,tzinfo=pytz.utc))
                 # write to disk
                 directory = "/events"    
-
-                #if not os.path.exists(directory):
-                #    os.makedirs(directory)
                 event_name = sheet_name
             
                 file_path = os.path.join(directory, event_name + '.ics')
