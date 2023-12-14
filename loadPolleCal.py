@@ -32,13 +32,13 @@ def return_newWeek_df(df):
 save_to_Ical = True
 
 # import excel file
-xl = pd.ExcelFile('/Users/elena/Downloads/TerminkalenderPolle.xlsx')
+xl = pd.ExcelFile('/Users/xxxx/Downloads/Terminkalender.xlsx')
 
 sheet_names = ["Mai"]# xl.sheet_names  # get all sheet names ####["September"] #
 # run through all sheets of file
 for sheet_name in sheet_names:
     # import sheet of file
-    df = pd.read_excel('/Users/elena/Downloads/TerminkalenderPolle.xlsx', sheet_name=sheet_name)
+    df = pd.read_excel('/Users/xxxx/Downloads/Terminkalender.xlsx', sheet_name=sheet_name)
    
     # drop columns which start with "Pauline"
     df = df[df.columns.drop(list(df.filter(regex='Pauline')))]
